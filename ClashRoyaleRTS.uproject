@@ -1,0 +1,28 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.3",
+  "Category": "Games",
+  "Description": "Clash Royale-inspired single-player mobile RTS prototype.",
+  "Modules": [
+    {
+      "Name": "ClashRoyaleRTS",
+      "Type": "Runtime",
+      "LoadingPhase": "Default",
+      "AdditionalDependencies": [
+        "Engine"
+      ]
+    }
+  ],
+  "TargetPlatforms": [
+    "Android",
+    "IOS",
+    "Win64",
+    "Mac",
+    "Linux"
+  ],
+  "Plugins": [
+    "/Script/Blutility",
+    "/Script/UMG",
+    "/Script/GameplayAbilities"
+  ]
+}
