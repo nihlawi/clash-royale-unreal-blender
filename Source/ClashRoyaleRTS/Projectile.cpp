@@ -1,35 +1,38 @@
-#pragma once
+#include "RTSMatchManager.h"
+#include "Kismet/GameplayStatics.h"
+#include "HUDManager.h"
 
-#include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
-#include "Projectile.generated.h"
-
-UCLASS()
-class CLASHROYALERTS_API AProjectile : public AActor
+void ARTSMatchManager::BeginPlay()
 {
-    GENERATED_BODY()
+    Super::BeginPlay();
+    StartMatch();
+}
 
-public:
-    AProjectile();
+void ARTSMatchManager::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
 
-    virtual void BeginPlay() override;
-    virtual void Tick(float DeltaTime) override;
+    if (bMatchFinished) return;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile")
-    float ProjectileSpeed = 700.f;
+    CurrentTimeRemaining -= DeltaTime;
+    TickElixir(DeltaTime);
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile")
-    float Damage = 25.f;
+    // update HUD if present
+    TArray<AActor*> Found;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AHUDManager::StaticClass(), Found);
+    if (Found.Num() > 0)
+    {
+        AHUDManager* HM = Cast<AHUDManager>(Found[0]);
+        if (HM)
+        {
+            HM->UpdateElixir(CurrentBlueElixir, MaxElixir);
+            HM->UpdateTimer(CurrentTimeRemaining);
+            HM->UpdateCrowns(BlueCrowns, RedCrowns);
+        }
+    }
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile")
-    float SplashRadius = 150.f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile")
-    AActor* TargetActor = nullptr;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile")
-    FString TeamName = TEXT("Blue");
-
-private:
-    float LifeTime = 2.5f;
-};
+    if (CurrentTimeRemaining <= 0.f)
+    {
+        ResolveTimeEnd();
+    }
+}
