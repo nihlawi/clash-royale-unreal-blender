@@ -1,47 +1,117 @@
-#pragma once
+#include "Tower.h"
 
-#include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
-#include "Tower.generated.h"
+#include "BaseTroop.h"
+#include "Kismet/GameplayStatics.h"
+#include "TowerManager.h"
+#include "ClashRoyaleRTSGameModeBase.h"
 
-UCLASS()
-class CLASHROYALERTS_API ATower : public AActor
+ATower::ATower()
 {
-    GENERATED_BODY()
+    PrimaryActorTick.bCanEverTick = true;
+}
 
-public:
-    ATower();
+void ATower::BeginPlay()
+{
+    Super::BeginPlay();
+    CurrentHealth = MaxHealth;
 
-    virtual void BeginPlay() override;
-    virtual void Tick(float DeltaTime) override;
+    // Register with TowerManager if present in the level
+    TArray<AActor*> Found;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), ATowerManager::StaticClass(), Found);
+    if (Found.Num() > 0)
+    {
+        ATowerManager* Manager = Cast<ATowerManager>(Found[0]);
+        if (Manager)
+        {
+            Manager->RegisterTower(this);
+        }
+    }
+}
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tower")
-    float MaxHealth = 1200.f;
+void ATower::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Tower")
-    float CurrentHealth = 1200.f;
+    FireAccumulator += DeltaTime;
+    if (FireAccumulator >= FireRate)
+    {
+        FireAccumulator = 0.f;
+        FireAtClosestEnemy();
+    }
+}
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tower")
-    float FireRange = 350.f;
+void ATower::TakeDamage(float Amount)
+{
+    CurrentHealth -= Amount;
+    if (CurrentHealth <= 0.f)
+    {
+        // Notify tower manager and game mode
+        TArray<AActor*> Found;
+        UGameplayStatics::GetAllActorsOfClass(GetWorld(), ATowerManager::StaticClass(), Found);
+        if (Found.Num() > 0)
+        {
+            ATowerManager* Manager = Cast<ATowerManager>(Found[0]);
+            if (Manager)
+            {
+                Manager->NotifyTowerDestroyed(this);
+            }
+        }
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tower")
-    float FireRate = 1.2f;
+        // If this is the king tower, end the match immediately
+        if (bIsKingTower)
+        {
+            AClashRoyaleRTSGameModeBase* GM = Cast<AClashRoyaleRTSGameModeBase>(UGameplayStatics::GetGameMode(this));
+            if (GM)
+            {
+                FString Winner = (TeamName == TEXT("Blue")) ? TEXT("Red") : TEXT("Blue");
+                GM->EndMatch(Winner);
+            }
+        }
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tower")
-    float Damage = 25.f;
+        Destroy();
+    }
+}
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tower")
-    FString TeamName = TEXT("Blue");
+void ATower::FireAtClosestEnemy()
+{
+    TArray<AActor*> AllActors;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), ABaseTroop::StaticClass(), AllActors);
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tower")
-    bool bIsKingTower = false;
+    AActor* BestTarget = nullptr;
+    float BestDistance = TNumericLimits<float>::Max();
 
-    UFUNCTION(BlueprintCallable, Category = "Tower")
-    void TakeDamage(float Amount);
+    for (AActor* TestActor : AllActors)
+    {
+        if (!TestActor || TestActor == this)
+        {
+            continue;
+        }
 
-    UFUNCTION(BlueprintCallable, Category = "Tower")
-    void FireAtClosestEnemy();
+        ABaseTroop* Troop = Cast<ABaseTroop>(TestActor);
+        if (!Troop)
+        {
+            continue;
+        }
 
-private:
-    float FireAccumulator = 0.f;
-};
+        if (Troop->TeamName == TeamName)
+        {
+            continue;
+        }
+
+        float Dist = FVector::Dist(TestActor->GetActorLocation(), GetActorLocation());
+        if (Dist <= FireRange && Dist < BestDistance)
+        {
+            BestDistance = Dist;
+            BestTarget = TestActor;
+        }
+    }
+
+    if (BestTarget)
+    {
+        ABaseTroop* Troop = Cast<ABaseTroop>(BestTarget);
+        if (Troop)
+        {
+            Troop->TakeDamage(Damage);
+        }
+    }
+}
